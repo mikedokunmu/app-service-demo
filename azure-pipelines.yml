@@ -63,8 +63,8 @@ stages:
               command: 'validate'
               workingDirectory: '$(System.DefaultWorkingDirectory)/app-service'
   - stage: TfDeploy
-    condition: succeeded('validate')
-    dependsOn: validate
+    condition: succeeded('validateandinit')
+    dependsOn: validateandinit
     jobs:
       - job: apply
         steps:
