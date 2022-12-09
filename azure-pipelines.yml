@@ -22,10 +22,9 @@ stages:
   - stage: DockerInsatll
     jobs: 
       - job: Install
-        continueOnError: fasle
+        continueOnError: false
         steps:
-          - task: DockerInstaller@
-            displayName: Docker Installlation
+          - task: DockerInstaller@0
             inputs:
               dockerVersion: '17.09.0-ce'
 
