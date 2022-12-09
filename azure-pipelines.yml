@@ -1,0 +1,111 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  acr: 'demoappcontainerRegistry'
+  arg: 'rg-demo-app'
+  asa: 'demoappstoragedemoaccnt'
+  aca: 'dempoappstoragecont'
+  azkey: 'terraform.tfstate'
+  appservice: 'docker-app-service'
+
+
+stages:
+  - stage: DockerInsatll
+    jobs: 
+      - job: Install
+        continueOnError: fasle
+        steps:
+          - task: DockerInstaller@
+            displayName: Docker Installlation
+            inputs:
+              dockerVersion: '17.09.0-ce'
+
+          - task: Docker@2
+            displayName: Docker Build and Push
+            inputs:
+              repository: '$(acr)'
+              command: 'buildAndPush'
+              Dockerfile: '$(Build.SourcesDirectory)/microservice_app_helm_nginx/frontend/Dockerfile'
+              buildContext: '$(Build.SourcesDirectory)/microservice_app_helm_nginx/frontend'
+  - stage: validateandinit
+    jobs:
+      - job: tfvalidate
+        steps:    
+          - task: TerraformInstaller@0
+            displayName: Terraform Instalation
+            inputs:
+              terraformVersion: 'latest'
+          
+          - task: TerraformTaskV3@3
+            displayName: init
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/app-service'
+              backendServiceArm: 'AzServiceConnectionPOC'
+              backendAzureRmResourceGroupName: '$(arg)'
+              backendAzureRmStorageAccountName: '$(asa)'
+              backendAzureRmContainerName: '$(aca)'
+              backendAzureRmKey: '$(azkey)'
+            
+          - task: TerraformTaskV3@3
+            displayName: validate
+            inputs:
+              provider: 'azurerm'
+              command: 'validate'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/app-service'
+  - stage: TfDeploy
+    condition: succeeded('validate')
+    dependsOn: validate
+    jobs:
+      - job: apply
+        steps:
+          - task: TerraformInstaller@0
+            inputs:
+              terraformVersion: 'latest'
+          
+          - task: TerraformTaskV3@3
+            displayName: init
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/app-service'
+              backendServiceArm: 'AzServiceConnectionPOC'
+              backendAzureRmResourceGroupName: '$(arg)'
+              backendAzureRmStorageAccountName: '$(asa)'
+              backendAzureRmContainerName: '$(aca)'
+              backendAzureRmKey: '$(azkey)'
+          
+          - task: TerraformTaskV3@3
+            displayName: apply
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/app-service'
+              environmentServiceNameAzureRM: 'AzServiceConnectionPOC'
+
+  - stage: AppServiceDeploy      
+    dependsOn: apply
+    jobs: 
+      - job: Deploy
+        steps:
+          - task: AzureRmWebAppDeployment@4
+            inputs:
+              ConnectionType: 'AzureRM'
+              azureSubscription: 'AzServiceConnectionPOC'
+              appType: 'webAppLinux'
+              WebAppName: '$(appservice)'
+              packageForLinux: '$(System.DefaultWorkingDirectory)/**/*.zip'
+              RuntimeStack: 'NODE|10.12'
+           
+          
+           
